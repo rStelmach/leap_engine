@@ -1,10 +1,15 @@
 use minifb::{Key, Window, WindowOptions};
+use std::time::Instant;
 
 const WIDTH: usize = 1280;
 const HEIGHT: usize = 720;
 const GRAVITY: f32 = 0.25;
-const JUMP_POWER: f32 = -10.0;
+const BASE_JUMP_POWER: f32 = -7.0;
+const MAX_HOLD_TIME: f32 = 1.1;
+const MAX_JUMP_MULTIPLIER: f32 = 1.8;
 const GROUND_LEVEL: f32 = HEIGHT as f32 - 20.0;
+const WHITE: u32 = 0xFFFFFF;
+const YELLOW: u32 = 0xFFFF00;
 
 struct Platform {
     x: f32,
@@ -22,6 +27,7 @@ struct GameObject {
     color: u32,
     velocity_y: f32,
     on_ground: bool,
+    jump_start_time: Option<Instant>,
 }
 
 impl GameObject {
@@ -34,12 +40,32 @@ impl GameObject {
             color,
             velocity_y: 0.0,
             on_ground: false,
+            jump_start_time: None,
         }
     }
 
     fn update(&mut self, window: &Window, platforms: &[Platform]) {
-        if (window.is_key_down(Key::Space) || window.is_key_down(Key::W)) && self.on_ground {
-            self.velocity_y = JUMP_POWER;
+        if window.is_key_down(Key::Space) && self.on_ground {
+            if self.jump_start_time.is_none() {
+                self.jump_start_time = Some(Instant::now());
+            }
+
+            if let Some(start_time) = self.jump_start_time {
+                let elapsed = start_time.elapsed().as_secs_f32();
+                if elapsed >= MAX_HOLD_TIME {
+                    self.color = YELLOW;
+                }
+            }
+        } else if !window.is_key_down(Key::Space) && self.jump_start_time.is_some() {
+            if let Some(start_time) = self.jump_start_time {
+                let elapsed = start_time.elapsed().as_secs_f32();
+                let hold_time = elapsed.min(MAX_HOLD_TIME);
+                let jump_power = BASE_JUMP_POWER
+                    * (1.0 + (MAX_JUMP_MULTIPLIER - 1.0) * (hold_time / MAX_HOLD_TIME));
+                self.velocity_y = jump_power;
+            }
+            self.jump_start_time = None;
+            self.color = WHITE;
             self.on_ground = false;
         }
 
@@ -150,14 +176,14 @@ fn main() {
             panic!("{}", e);
         });
 
-    let mut player = GameObject::new(100.0, 100.0, 50, 50, 0xFFFFFF);
+    let mut player = GameObject::new(100.0, 100.0, 50, 50, WHITE);
     let platforms = vec![
-        Platform::new(200.0, 600.0, 100, 20, 0x00FF00),
-        Platform::new(300.0, 500.0, 100, 20, 0x00FF00),
-        Platform::new(500.0, 400.0, 100, 20, 0x00FF00),
-        Platform::new(700.0, 300.0, 100, 20, 0x00FF00),
-        Platform::new(900.0, 200.0, 100, 20, 0x00FF00),
-        Platform::new(1100.0, 150.0, 100, 20, 0x0000FF),
+        Platform::new(200.0, 600.0, 100, 20, 0x0000FF),
+        Platform::new(300.0, 500.0, 100, 20, 0x0000FF),
+        Platform::new(500.0, 400.0, 100, 20, 0x0000FF),
+        Platform::new(700.0, 300.0, 100, 20, 0x0000FF),
+        Platform::new(900.0, 200.0, 100, 20, 0x0000FF),
+        Platform::new(1100.0, 150.0, 100, 20, 0x00FF00),
     ];
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
